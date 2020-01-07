@@ -33,26 +33,35 @@ func (queue *Queue) Push(value interface{}) {
 
 // Pop ..
 func (queue *Queue) Pop() (value interface{}) {
-	queue.waiting = queue.waiting + 1
-	if queue.innerList.Len() == 0 {
-		<-queue.lock
-	}
-	queue.Lock()
-	queue.waiting = queue.waiting - 1
-	el := queue.innerList.Front()
-	value = el.Value
-	queue.innerList.Remove(el)
+	value = queue._pop()
 
+	for ; value == nil; value = queue._pop() {
+		queue.waiting = queue.waiting + 1
+		<-queue.lock
+		queue.waiting = queue.waiting - 1
+	}
+
+	return value
+}
+
+// Pop ..
+func (queue *Queue) _pop() (value interface{}) {
+	queue.Lock()
+	el := queue.innerList.Front()
+	if el != nil {
+		value = el.Value
+		queue.innerList.Remove(el)
+	}
 	queue.Unlock()
 	return value
 }
 
 func main() {
 	queue := NewQueue()
-	quit := make(chan bool)
+	// quit := make(chan bool)
 
 	for i := 0; i < 100; i++ {
-		queue.Push(fmt.Sprintf("Default %d", i))
+		queue.Push(fmt.Sprintf("Pre %d", i))
 	}
 
 	fmt.Println("Pre 1", queue.Pop())
@@ -65,10 +74,10 @@ func main() {
 			queue.Push(fmt.Sprintf("Send %d", i))
 			time.Sleep(2 * time.Millisecond)
 			if i%10 == 5 {
-				time.Sleep(200 * time.Millisecond)
+				time.Sleep(10 * time.Millisecond)
 			}
 		}
-		quit <- true
+		// quit <- true
 	}(queue)
 
 	fmt.Println("main 1", queue.Pop())
@@ -76,6 +85,13 @@ func main() {
 	go func(queue *Queue) {
 		for true {
 			fmt.Println("Rec:1 > ", queue.Pop())
+		}
+	}(queue)
+
+	go func(queue *Queue) {
+		for i := 0; i < 100; i++ {
+			queue.Push(fmt.Sprintf("Mid %d", i))
+			time.Sleep(2 * time.Millisecond)
 		}
 	}(queue)
 
@@ -92,5 +108,11 @@ func main() {
 		}
 	}(queue)
 
-	<-quit
+	// <-quit
+	for i := 0; i < 500; i++ {
+		queue.Push(fmt.Sprintf("Post %d", i))
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	// time.Sleep(10 * time.Second)
 }
