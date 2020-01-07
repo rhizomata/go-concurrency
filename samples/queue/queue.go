@@ -25,7 +25,7 @@ func NewQueue() *Queue {
 func (queue *Queue) Push(value interface{}) {
 	queue.Lock()
 	queue.innerList.PushBack(value)
-	if queue.innerList.Len() == 1 {
+	if queue.waiting > 1 {
 		queue.lock <- false
 	}
 	queue.Unlock()
@@ -33,12 +33,12 @@ func (queue *Queue) Push(value interface{}) {
 
 // Pop ..
 func (queue *Queue) Pop() (value interface{}) {
+	queue.waiting = queue.waiting + 1
 	if queue.innerList.Len() == 0 {
-		queue.waiting = queue.waiting + 1
 		<-queue.lock
-		queue.waiting = queue.waiting - 1
 	}
 	queue.Lock()
+	queue.waiting = queue.waiting - 1
 	el := queue.innerList.Front()
 	value = el.Value
 	queue.innerList.Remove(el)
@@ -51,11 +51,12 @@ func main() {
 	queue := NewQueue()
 	quit := make(chan bool)
 
-	// for i := 0; i < 100; i++ {
-	// 	queue.Push(fmt.Sprintf("Default %d", i))
-	// }
+	for i := 0; i < 100; i++ {
+		queue.Push(fmt.Sprintf("Default %d", i))
+	}
 
-	// fmt.Println("PreSet", queue.Pop())
+	fmt.Println("Pre 1", queue.Pop())
+	fmt.Println("Pre 2", queue.Pop())
 	// quit <- true
 
 	go func(queue *Queue) {
@@ -70,12 +71,15 @@ func main() {
 		quit <- true
 	}(queue)
 
+	fmt.Println("main 1", queue.Pop())
+
 	go func(queue *Queue) {
 		for true {
 			fmt.Println("Rec:1 > ", queue.Pop())
 		}
 	}(queue)
 
+	fmt.Println("main 2", queue.Pop())
 	go func(queue *Queue) {
 		for true {
 			fmt.Println("Rec:2 > ", queue.Pop())
